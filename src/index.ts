@@ -1,89 +1,71 @@
 // fewsats.ts
 import axios, { AxiosInstance, AxiosResponse } from 'axios';
+import {
+  UserInfo,
+  Balance,
+  PaymentMethod,
+  OfferData,
+  L402OffersData,
+  Offer,
+  L402Offers,
+  CreatedOffer,
+  CreatedOfferData,
+  PaymentDetails,
+  PaymentDetailsData,
+  PaymentStatus,
+  PaymentStatusData,
+  PaymentResponse,
+  PaymentResponseData,
+  FewsatsOptions
+} from './types'
 
-// Interfaces for type safety
-interface FewsatsConfig {
-  apiKey?: string;
-  baseUrl?: string;
+// Helper functions for converting between API and client types
+export function dataToOffer(data: OfferData): Offer {
+  return {
+    offerId: data.offer_id,
+    amount: data.amount,
+    currency: data.currency,
+    description: data.description,
+    title: data.title,
+    paymentMethods: data.payment_methods,
+    type: data.type || 'one-off'
+  };
 }
 
-interface OfferData {
-  offer_id: string;
-  amount: number;
-  currency: string;
-  description: string;
-  title: string;
-  payment_methods?: string[];
-  type?: string;
+export function offerToData(offer: Offer): OfferData {
+  return {
+    offer_id: offer.offerId,
+    amount: offer.amount,
+    currency: offer.currency,
+    description: offer.description,
+    title: offer.title,
+    payment_methods: offer.paymentMethods,
+    type: offer.type || 'one-off'
+  };
 }
 
-interface L402OffersData {
-  offers: OfferData[];
-  payment_context_token: string;
-  payment_request_url: string;
-  version: string;
+export function dataToL402Offers(data: L402OffersData): L402Offers {
+  return {
+    offers: data.offers.map(dataToOffer),
+    paymentContextToken: data.payment_context_token,
+    paymentRequestUrl: data.payment_request_url,
+    version: data.version
+  };
 }
 
-// Offer class
-export class Offer {
-  constructor(
-    public offerId: string,
-    public amount: number,
-    public currency: string,
-    public description: string,
-    public title: string,
-    public paymentMethods: string[] = [],
-    public type: string = 'one-off'
-  ) {}
-
-  static from(data: OfferData): Offer {
-    return new Offer(
-      data.offer_id,
-      data.amount,
-      data.currency,
-      data.description,
-      data.title,
-      data.payment_methods,
-      data.type
-    );
-  }
+export function l402OffersToData(offers: L402Offers): L402OffersData {
+  return {
+    offers: offers.offers.map(offerToData),
+    payment_context_token: offers.paymentContextToken,
+    payment_request_url: offers.paymentRequestUrl,
+    version: offers.version
+  };
 }
 
-// L402Offers class
-export class L402Offers {
-  constructor(
-    public offers: Offer[],
-    public paymentContextToken: string,
-    public paymentRequestUrl: string,
-    public version: string
-  ) {}
-
-  static from(data: L402OffersData): L402Offers {
-    const offers = data.offers.map(offer => Offer.from(offer));
-    return new L402Offers(offers, data.payment_context_token, data.payment_request_url, data.version);
-  }
-
-  toJSON(): L402OffersData {
-    return {
-      offers: this.offers.map(o => ({
-        offer_id: o.offerId,
-        amount: o.amount,
-        currency: o.currency,
-        description: o.description,
-        title: o.title,
-        payment_methods: o.paymentMethods,
-        type: o.type
-      })),
-      payment_context_token: this.paymentContextToken,
-      payment_request_url: this.paymentRequestUrl,
-      version: this.version
-    };
-  }
-
-  toString(): string {
-    const offersStr = this.offers.map(o => `- ${o.title} (${o.amount / 100} ${o.currency})`).join('\n');
-    return `L402 Offers:\n${offersStr}\nPayment URL: ${this.paymentRequestUrl}\nContext Token: ${this.paymentContextToken}`;
-  }
+// Function to stringify L402Offers for display purposes
+export function stringifyL402Offers(offers: L402Offers): string {
+  const offersStr = offers.offers.map(o => `- ${o.title} (${o.amount / 100} ${o.currency})`).join('\n');
+  return `L402 Offers:\n${offersStr}\nPayment URL: ${offers.paymentRequestUrl}\nContext Token: ${offers.paymentContextToken}`;
 }
 
 // Main Fewsats client class
@@ -91,7 +73,7 @@ export class Fewsats {
   private client: AxiosInstance;
   private baseUrl: string;
 
-  constructor({ apiKey, baseUrl = 'https://api.fewsats.com' }: FewsatsConfig = {}) {
+  constructor({ apiKey, baseUrl = 'https://api.fewsats.com' }: FewsatsOptions = {}) {
     const key = apiKey || process.env.FEWSATS_API_KEY;
     if (!key) {
       throw new Error('The apiKey must be set either by passing apiKey to the client or by setting the FEWSATS_API_KEY environment variable');
@@ -121,37 +103,60 @@ export class Fewsats {
     }
   }
 
-  async me(): Promise<any> {
-    return this.request('GET', '/v0/users/me');
+  async me(): Promise<UserInfo> {
+    return this.request<UserInfo>('GET', '/v0/users/me');
   }
 
-  async balance(): Promise<any> {
-    return this.request('GET', '/v0/wallets');
+  async balance(): Promise<Balance[]> {
+    return this.request<Balance[]>('GET', '/v0/wallets');
   }
 
-  async paymentMethods(): Promise<any[]> {
-    return this.request('GET', '/v0/stripe/payment-methods');
+  async paymentMethods(): Promise<PaymentMethod[]> {
+    return this.request<PaymentMethod[]>('GET', '/v0/stripe/payment-methods');
   }
 
-  async createOffers(offers: OfferData[]): Promise<any> {
-    return this.request('POST', '/v0/l402/offers', { offers });
+  async createOffers(offers: Offer[]): Promise<CreatedOffer> {
+    const apiOffers = offers.map(offerToData);
+    const res = await this.request<CreatedOfferData>('POST', '/v0/l402/offers', { offers: apiOffers });
+    return {
+      paymentContextToken: res.payment_context_token,
+      paymentRequestUrl: res.payment_request_url,
+      version: res.version,
+      offers: res.offers.map(dataToOffer)
+    };
   }
 
   async getPaymentDetails(
     paymentRequestUrl: string,
     offerId: string,
-    paymentMethod: string, // lightning, credit_card, etc...
+    paymentMethod: string,
     paymentContextToken: string
-  ): Promise<any> {
-    return axios.post(paymentRequestUrl, {
-      offer_id: offerId,
-      payment_method: paymentMethod,
-      payment_context_token: paymentContextToken
-    });
+  ): Promise<PaymentDetails> {
+    const response = await axios.post(paymentRequestUrl, {
+        offer_id: offerId,
+        payment_method: paymentMethod,
+        payment_context_token: paymentContextToken,
+      });
+    
+    const data = response.data;
+    return {
+      expiresAt: data.expires_at,
+      offerId: data.offer_id,
+      paymentRequest: data.payment_request,
+      version: data.version
+    };
   }
 
-  async getPaymentStatus(paymentContextToken: string): Promise<any> {
-    return this.request('GET', `/v0/l402/payment-status?payment_context_token=${paymentContextToken}`);
+  async getPaymentStatus(paymentContextToken: string): Promise<PaymentStatus> {
+    const result = await this.request<PaymentStatusData>('GET', `/v0/l402/payment-status?payment_context_token=${paymentContextToken}`);
+    return {
+      status: result.status,
+      paidAt: result.paid_at,
+      amount: result.amount,
+      currency: result.currency,
+      offerId: result.offer_id,
+      paymentContextToken: result.payment_context_token
+    };
   }
 
   async setWebhook(webhookUrl: string): Promise<any> {
@@ -172,12 +177,39 @@ export class Fewsats {
     });
   }
 
-  async payOffer(offerId: string, l402Offer: L402Offers): Promise<any> {
-    const offerJson = l402Offer.toJSON();
-    return this.request('POST', '/v0/l402/purchases/from-offer', { offer_id: offerId, ...offerJson }, 30000);
+  async payOffer(offerId: string, l402Offer: L402Offers): Promise<PaymentResponse> {
+    const offerJson = l402OffersToData(l402Offer);
+    const result = await this.request<PaymentResponseData>(
+      'POST',
+      '/v0/l402/purchases/from-offer',
+      { offer_id: offerId, ...offerJson },
+      30000
+    );
+    
+    return this.mapPaymentResponseData(result);
   }
 
-  async paymentInfo(pid: string): Promise<any> {
-    return this.request('GET', `/v0/l402/outgoing-payments/${pid}`);
+  async paymentInfo(pid: string): Promise<PaymentResponse> {
+    const result = await this.request<PaymentResponseData>('GET', `/v0/l402/outgoing-payments/${pid}`);
+    return this.mapPaymentResponseData(result);
+  }
+  
+  private mapPaymentResponseData(data: PaymentResponseData): PaymentResponse {
+    return {
+      id: data.id,
+      status: data.status,
+      createdAt: data.created_at,
+      paymentMethod: data.payment_method,
+      amount: data.amount,
+      currency: data.currency,
+      description: data.description,
+      invoice: data.invoice,
+      isTest: data.is_test,
+      paymentContextToken: data.payment_context_token,
+      paymentRequestUrl: data.payment_request_url,
+      preimage: data.preimage,
+      title: data.title,
+      type: data.type
+    };
   }
 }
