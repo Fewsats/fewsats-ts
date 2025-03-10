@@ -62,6 +62,29 @@ const offer = await client.createOffers([{
 
 
 
+## Examples
+
+Check out the examples directory for full usage examples:
+
+```bash
+# Run the simple usage example
+export FEWSATS_API_KEY=your_api_key_here
+npx ts-node examples/simple-usage.ts
+```
+
+The simple-usage.ts example demonstrates the complete payment flow:
+
+**Vendor side:**
+1. Creating a 1 cent offer
+2. Checking the initial payment status
+
+**Buyer side:**
+3. Paying for the offer
+4. Getting payment info
+
+**Vendor side (after payment):**
+5. Checking the final payment status (after a short delay)
+
 ## License
 
 MIT 

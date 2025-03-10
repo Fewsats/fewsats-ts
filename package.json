@@ -1,6 +1,6 @@
 {
   "name": "fewsats",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "TypeScript client for Fewsats API",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -8,8 +8,13 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsc",
+    "clean": "rm -rf dist",
+    "build": "npm run clean && tsc && shx chmod +x dist/*.js",
     "prepublishOnly": "npm run build",
+    "publish": "npm publish",
+    "publish:patch": "npm version patch && npm publish",
+    "publish:minor": "npm version minor && npm publish",
+    "publish:major": "npm version major && npm publish",
     "test": "jest"
   },
   "dependencies": {
